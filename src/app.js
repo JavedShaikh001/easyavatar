@@ -5,7 +5,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { DEFAULTS, SLIDERS, CHOICES, normalizeParams } from './avatar/params.js';
 import { exportAvatar } from './avatar/exporter.js';
-import { getLandmarker, startCamera, stopCamera, attach, cameraOn } from './vision.js';
+import { getLandmarker, startCamera, stopCamera, attach, cameraOn, listCameras, currentCameraId, setPreferredCamera, isBlack } from './vision.js';
 import { scanFace } from './scan.js';
 import { Tracker } from './vtube.js';
 import { rgbToHex, hslToRgb } from './avatar/color.js';
@@ -348,20 +348,44 @@ const camVideo = $('#cam');
 const scanMsg = (m) => { $('#scanMsg').textContent = m; };
 let preScan = null;
 
+async function fillCameraList() {
+  const cams = await listCameras().catch(() => []);
+  const sel = $('#camSelect');
+  sel.innerHTML = '';
+  for (const c of cams) { const o = document.createElement('option'); o.value = c.id; o.textContent = c.label; sel.appendChild(o); }
+  sel.value = currentCameraId();
+  $('#camPickWrap').hidden = cams.length < 2;
+}
+async function turnCameraOn() {
+  scanMsg('Starting camera…');
+  await attach(camVideo, await startCamera());
+  $('#btnCam').textContent = 'Turn off camera';
+  $('#btnScan').disabled = false;
+  scanMsg('Fit your face inside the oval');
+  fillCameraList();
+  setTimeout(() => {
+    if (cameraOn() && camVideo.videoWidth && isBlack(camVideo)) {
+      scanMsg($('#camSelect').options.length > 1
+        ? 'The picture is black. Pick a different camera from the list above (virtual cameras like OBS often show black).'
+        : 'The picture is black. Open your camera\'s privacy shutter or check that no other app is using it.');
+    }
+  }, 2500);
+  getLandmarker((m) => scanMsg(m)).then(() => { if (!isBlack(camVideo)) scanMsg('Fit your face inside the oval, then press Scan'); }).catch((e) => scanMsg(e.message));
+}
 $('#btnCam').addEventListener('click', async () => {
   if (cameraOn() && !tracking) {
     stopCamera(); camVideo.srcObject = null;
     $('#btnCam').textContent = 'Turn on camera'; $('#btnScan').disabled = true; scanMsg('Camera is off');
     return;
   }
-  try {
-    scanMsg('Starting camera…');
-    await attach(camVideo, await startCamera());
-    $('#btnCam').textContent = 'Turn off camera';
-    $('#btnScan').disabled = false;
-    scanMsg('Fit your face inside the oval');
-    getLandmarker((m) => scanMsg(m)).then(() => scanMsg('Fit your face inside the oval, then press Scan')).catch((e) => scanMsg(e.message));
-  } catch (e) { scanMsg(e.message); }
+  try { await turnCameraOn(); } catch (e) { scanMsg(e.message); }
+});
+$('#camSelect').addEventListener('change', async (e) => {
+  setPreferredCamera(e.target.value);
+  const wasTracking = tracking;
+  if (wasTracking) stopTracking();
+  stopCamera(); camVideo.srcObject = null;
+  try { await turnCameraOn(); if (wasTracking) startTracking(); } catch (err) { scanMsg(err.message); }
 });
 
 $('#btnScan').addEventListener('click', async () => {

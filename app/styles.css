@@ -89,3 +89,5 @@ body.streaming #app { grid-template-columns: 0 1fr; grid-template-rows: 0 1fr; }
 body.streaming #panel, body.streaming .topbar, body.streaming .view-btns { display: none; }
 
 .note { background: var(--accent-soft); border-radius: 10px; padding: 8px 10px; margin-top: 10px; color: var(--ink); }
+.cam-pick { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-top: 10px; }
+.cam-pick select { flex: 1; min-width: 0; font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }

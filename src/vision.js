@@ -10,7 +10,10 @@ export function getLandmarker(onStatus = () => {}) {
       onStatus('Loading face tracker…');
       window.api.onModelStatus(onStatus);
       const fileset = await FilesetResolver.forVisionTasks(new URL('wasm', location.href).href.replace(/\/$/, ''));
-      const model = await window.api.getModel();
+      let model;
+      try { model = await window.api.getModel(); } catch (e) {
+        throw new Error('Could not download the face tracker (needed once, about 4 MB). Check your internet connection or firewall and try again. ' + String(e.message || '').replace(/^Error invoking remote method 'get-model': (Error: )?/, ''));
+      }
       const opts = (delegate) => ({
         baseOptions: { modelAssetBuffer: model, delegate },
         runningMode: 'VIDEO', numFaces: 1,
@@ -27,18 +30,61 @@ export function getLandmarker(onStatus = () => {}) {
   return landmarkerPromise;
 }
 
-export async function startCamera() {
+const CAM_KEY = 'easyavatar.camera';
+export function preferredCamera() { try { return localStorage.getItem(CAM_KEY) || ''; } catch { return ''; } }
+export function setPreferredCamera(id) { try { localStorage.setItem(CAM_KEY, id || ''); } catch {} }
+
+export async function listCameras() {
+  const devs = await navigator.mediaDevices.enumerateDevices();
+  return devs.filter((d) => d.kind === 'videoinput').map((d, i) => ({ id: d.deviceId, label: d.label || `Camera ${i + 1}` }));
+}
+
+function explain(e) {
+  const win = window.api.platform === 'win32', mac = window.api.platform === 'darwin';
+  if (e.name === 'NotAllowedError' || e.name === 'SecurityError') {
+    if (win) return 'Windows is blocking the camera. Open Settings → Privacy & security → Camera, turn on "Camera access" and "Let desktop apps access your camera", then try again.';
+    if (mac) return 'macOS is blocking the camera. Open System Settings → Privacy & Security → Camera and turn on EasyAvatar, then restart the app.';
+    return 'Camera permission was denied.';
+  }
+  if (e.name === 'NotFoundError' || e.name === 'DevicesNotFoundError') return 'No camera was found. Plug in a webcam (or turn it on) and try again.';
+  if (e.name === 'NotReadableError' || e.name === 'TrackStartError' || e.name === 'AbortError') return 'The camera is busy or turned off. Close other apps that use it (Zoom, Teams, OBS, the Camera app…), check any privacy shutter or camera key on your laptop, then try again.';
+  return 'Could not open the camera: ' + (e.message || e.name);
+}
+
+export async function startCamera(deviceId = preferredCamera()) {
   if (stream) return stream;
   const ok = await window.api.askCamera();
-  if (!ok) throw new Error('Camera permission was denied. Allow EasyAvatar to use the camera in your system settings.');
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }, audio: false });
-  } catch (e) {
-    if (e.name === 'NotFoundError') throw new Error('No camera was found. Plug in a webcam and try again.');
-    if (e.name === 'NotReadableError') throw new Error('The camera is busy. Close other apps that use it (Zoom, Teams, OBS…) and try again.');
-    throw new Error('Could not open the camera: ' + e.message);
+  if (!ok) throw new Error(explain({ name: 'NotAllowedError' }));
+  const base = { width: { ideal: 1280 }, height: { ideal: 720 } };
+  const tries = [];
+  if (deviceId) tries.push({ ...base, deviceId: { exact: deviceId } });
+  tries.push({ ...base, facingMode: 'user' }, true);
+  let last;
+  for (const video of tries) {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
+      const id = stream.getVideoTracks()[0]?.getSettings().deviceId;
+      if (id) setPreferredCamera(id);
+      return stream;
+    } catch (e) {
+      last = e;
+      console.warn('camera attempt failed', video, e.name, e.message);
+      if (e.name === 'NotAllowedError' || e.name === 'SecurityError') break; // retrying won't help
+    }
   }
-  return stream;
+  throw new Error(explain(last));
+}
+
+export function currentCameraId() { return stream?.getVideoTracks()[0]?.getSettings().deviceId || ''; }
+
+/** True when the camera delivers only (near) black frames — typical of virtual cameras or a closed privacy shutter. */
+export function isBlack(video) {
+  const c = document.createElement('canvas'); c.width = 32; c.height = 18;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(video, 0, 0, 32, 18);
+  const d = g.getImageData(0, 0, 32, 18).data;
+  let sum = 0; for (let i = 0; i < d.length; i += 4) sum += d[i] + d[i + 1] + d[i + 2];
+  return sum / (d.length / 4) / 3 < 6;
 }
 
 export function stopCamera() {
