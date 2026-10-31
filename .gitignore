@@ -1,0 +1,7 @@
+node_modules/
+dist/
+app/renderer.js
+app/wasm/
+app/models/
+*.log
+out/

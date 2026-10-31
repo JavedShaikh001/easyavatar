@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' data: blob:; worker-src 'self' blob:">
+  <title>EasyAvatar</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand"><span class="logo">◕‿◕</span> EasyAvatar</div>
+    <input id="avatarName" class="name-input" maxlength="40" aria-label="Avatar name">
+    <div class="spacer"></div>
+    <button class="btn ghost" id="btnRandom" title="Make a random avatar">🎲 Surprise me</button>
+    <button class="btn ghost" id="btnOpen">Open</button>
+    <button class="btn ghost" id="btnSave">Save</button>
+    <div class="menu-wrap">
+      <button class="btn primary" id="btnExport">Export ▾</button>
+      <div class="menu" id="exportMenu" hidden>
+        <button data-export="vrm"><b>VRM</b><span>For VTubing apps (VSeeFace, Warudo, VTube Studio) and Unity with UniVRM</span></button>
+        <button data-export="glb"><b>GLB</b><span>For Unity, Blender, Godot and other 3D tools</span></button>
+      </div>
+    </div>
+  </header>
+
+  <aside id="panel">
+    <nav class="tabs" role="tablist">
+      <button data-tab="scan" class="active"><span>📷</span>Scan</button>
+      <button data-tab="face"><span>🙂</span>Face</button>
+      <button data-tab="hair"><span>💇</span>Hair</button>
+      <button data-tab="body"><span>👕</span>Body</button>
+      <button data-tab="vtube"><span>🎥</span>VTube</button>
+    </nav>
+
+    <div class="tab-body">
+      <section data-panel="scan" class="active">
+        <h2>Make it look like you</h2>
+        <p class="hint">Look straight at the camera in good light. We read your face shape and colours and turn them into your character.</p>
+        <h3>Style</h3>
+        <div class="chips" data-choice="style"></div>
+        <div class="cam-wrap" id="scanCam">
+          <video id="cam" playsinline muted></video>
+          <div class="oval"></div>
+          <div class="cam-msg" id="scanMsg">Camera is off</div>
+          <div class="count" id="scanCount"></div>
+        </div>
+        <div class="row">
+          <button class="btn" id="btnCam">Turn on camera</button>
+          <button class="btn primary grow" id="btnScan" disabled>Scan my face</button>
+        </div>
+        <div class="scan-result" id="scanResult" hidden>
+          <div class="swatches">
+            <div><i id="swSkin"></i>Skin</div><div><i id="swHair"></i>Hair</div><div><i id="swEye"></i>Eyes</div>
+          </div>
+          <button class="btn small ghost" id="btnUndoScan">Undo scan</button>
+        </div>
+        <ul class="tips">
+          <li>Remove glasses and push hair away from your eyebrows.</li>
+          <li>Hairstyle and outfit aren't scanned — pick them in the Hair and Body tabs.</li>
+          <li>🔒 Your camera picture never leaves this computer.</li>
+        </ul>
+      </section>
+
+      <section data-panel="face">
+        <h2>Face</h2>
+        <h3>Style</h3>
+        <div class="chips" data-choice="style"></div>
+        <p class="hint note" id="realNote" hidden>Realistic style uses your scanned face as it is. The sliders below shape the anime style; hair, body and outfit work for both.</p>
+        <p class="hint note" id="realNoScan" hidden>Scan your face in the Scan tab to put your own face on the realistic character.</p>
+        <div class="colors">
+          <label>Skin <input type="color" data-color="skinColor"></label>
+          <label>Eyes <input type="color" data-color="eyeColor"></label>
+        </div>
+        <div id="faceSliders" class="sliders"></div>
+      </section>
+
+      <section data-panel="hair">
+        <h2>Hair</h2>
+        <div class="colors"><label>Hair colour <input type="color" data-color="hairColor"></label></div>
+        <h3>Style</h3><div class="chips" data-choice="hairStyle"></div>
+        <h3>Bangs</h3><div class="chips" data-choice="bangs"></div>
+        <div class="sliders"><label class="slider"><span>Length</span><input type="range" min="0" max="1" step="0.01" data-param="hairLength"></label></div>
+        <label class="check"><input type="checkbox" data-bool="ahoge"> Little hair antenna (ahoge)</label>
+      </section>
+
+      <section data-panel="body">
+        <h2>Body</h2>
+        <div id="bodySliders" class="sliders"></div>
+        <h3>Top</h3><div class="chips" data-choice="top"></div>
+        <div class="colors"><label>Top colour <input type="color" data-color="topColor"></label></div>
+        <h3>Bottom</h3><div class="chips" data-choice="bottom"></div>
+        <div class="colors">
+          <label>Bottom colour <input type="color" data-color="bottomColor"></label>
+          <label>Shoes <input type="color" data-color="shoeColor"></label>
+        </div>
+        <label class="check"><input type="checkbox" data-bool="socks"> Socks <input type="color" data-color="sockColor"></label>
+      </section>
+
+      <section data-panel="vtube">
+        <h2>VTube live</h2>
+        <p class="hint">Your character copies your head, eyes and mouth from the webcam. Capture this window in OBS or your streaming app.</p>
+        <div class="row">
+          <button class="btn primary grow" id="btnTrack">Start tracking</button>
+          <button class="btn" id="btnRecenter" disabled>Recenter</button>
+        </div>
+        <div class="track-status" id="trackStatus"></div>
+        <label class="check"><input type="checkbox" id="optMirror" checked> Mirror (move like a mirror)</label>
+        <label class="check"><input type="checkbox" id="optPreview" checked> Show small camera preview</label>
+        <h3>Background</h3>
+        <div class="chips" id="bgChips">
+          <button data-bg="studio" class="active">Studio</button>
+          <button data-bg="green">Green screen</button>
+          <button data-bg="blue">Blue screen</button>
+          <button data-bg="dark">Dark</button>
+        </div>
+        <h3>Expressions <small>(keys 1–5, 0 to reset)</small></h3>
+        <div class="chips" id="exprChips">
+          <button data-expr="happy">😊 Happy</button>
+          <button data-expr="angry">😠 Angry</button>
+          <button data-expr="sad">😢 Sad</button>
+          <button data-expr="Surprised">😮 Surprised</button>
+          <button data-expr="relaxed">😌 Relaxed</button>
+        </div>
+        <button class="btn wide" id="btnStream">Hide controls for streaming (Esc to return)</button>
+      </section>
+    </div>
+  </aside>
+
+  <main id="stage" data-bg="studio">
+    <canvas id="view"></canvas>
+    <div class="view-btns">
+      <button data-view="face">Face</button>
+      <button data-view="upper" class="active">Upper body</button>
+      <button data-view="full">Full body</button>
+    </div>
+    <video id="pip" playsinline muted hidden></video>
+    <div class="busy" id="busy" hidden><span></span>Building…</div>
+    <div class="toast" id="toast" hidden></div>
+  </main>
+</div>
+<script src="renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,108 @@
+{
+  "name": "easyavatar",
+  "productName": "EasyAvatar",
+  "version": "1.0.0",
+  "description": "Turn your webcam face into an anime-style 3D avatar, VTube with it, and export VRM/GLB.",
+  "author": "JavedShaikh001",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "build": "node scripts/build-renderer.mjs",
+    "fetch-model": "node scripts/fetch-model.mjs",
+    "start": "npm run build && electron .",
+    "test": "node test/geometry.test.mjs",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "45.2.1",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2",
+    "three": "^0.187.0",
+    "@pixiv/three-vrm": "^3.5.5",
+    "@mediapipe/tasks-vision": "^1.2.0"
+  },
+  "build": {
+    "appId": "com.easyavatar.app",
+    "productName": "EasyAvatar",
+    "files": [
+      "electron/**",
+      "app/**",
+      "build/icon.png",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "EasyAvatar",
+      "artifactName": "EasyAvatar-Setup-${version}.exe"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "category": "public.app-category.graphics-design",
+      "icon": "build/icon.png",
+      "extendInfo": {
+        "NSCameraUsageDescription": "EasyAvatar uses your camera to shape your character and to animate it while you VTube. Images never leave your Mac."
+      },
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "artifactName": "EasyAvatar-${version}.dmg"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Graphics",
+      "icon": "build/icon.png",
+      "maintainer": "EasyAvatar <skjvd35@users.noreply.github.com>",
+      "synopsis": "Webcam to anime 3D avatar maker"
+    },
+    "appImage": {
+      "artifactName": "EasyAvatar-${version}.AppImage"
+    },
+    "deb": {
+      "artifactName": "easyavatar_${version}_amd64.deb"
+    },
+    "publish": null
+  },
+  "homepage": "https://github.com/JavedShaikh001/easyavatar",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JavedShaikh001/easyavatar.git"
+  }
+}
