@@ -77,15 +77,22 @@ export async function startCamera(deviceId = preferredCamera()) {
 
 export function currentCameraId() { return stream?.getVideoTracks()[0]?.getSettings().deviceId || ''; }
 
-/** True when the camera delivers only (near) black frames — typical of virtual cameras or a closed privacy shutter. */
-export function isBlack(video) {
+/** Inspect a frame: 'black', 'blank' (one flat colour, e.g. the green frames of a broken capture path) or 'ok'. */
+export function frameState(video) {
+  if (!video.videoWidth) return 'none';
   const c = document.createElement('canvas'); c.width = 32; c.height = 18;
   const g = c.getContext('2d', { willReadFrequently: true });
   g.drawImage(video, 0, 0, 32, 18);
   const d = g.getImageData(0, 0, 32, 18).data;
-  let sum = 0; for (let i = 0; i < d.length; i += 4) sum += d[i] + d[i + 1] + d[i + 2];
-  return sum / (d.length / 4) / 3 < 6;
+  const n = d.length / 4;
+  let sum = 0, sq = 0;
+  for (let i = 0; i < d.length; i += 4) { const l = (d[i] + d[i + 1] + d[i + 2]) / 3; sum += l; sq += l * l; }
+  const mean = sum / n, sd = Math.sqrt(Math.max(0, sq / n - mean * mean));
+  if (mean < 6) return 'black';
+  if (sd < 3.5) return 'blank';
+  return 'ok';
 }
+export const isBlack = (video) => frameState(video) !== 'ok';
 
 export function stopCamera() {
   if (stream) stream.getTracks().forEach((t) => t.stop());

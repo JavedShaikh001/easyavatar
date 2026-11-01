@@ -91,3 +91,6 @@ body.streaming #panel, body.streaming .topbar, body.streaming .view-btns { displ
 .note { background: var(--accent-soft); border-radius: 10px; padding: 8px 10px; margin-top: 10px; color: var(--ink); }
 .cam-pick { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-top: 10px; }
 .cam-pick select { flex: 1; min-width: 0; font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.cam-help { background: #fff4e5; border: 1px solid #ffd7a3; border-radius: 10px; padding: 10px 12px; margin: 10px 0; font-size: 13.5px; }
+.cam-help p { margin: 0 0 8px; }
+.small-check { font-size: 13px; color: var(--muted); }

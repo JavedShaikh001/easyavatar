@@ -5,7 +5,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { DEFAULTS, SLIDERS, CHOICES, normalizeParams } from './avatar/params.js';
 import { exportAvatar } from './avatar/exporter.js';
-import { getLandmarker, startCamera, stopCamera, attach, cameraOn, listCameras, currentCameraId, setPreferredCamera, isBlack } from './vision.js';
+import { getLandmarker, startCamera, stopCamera, attach, cameraOn, listCameras, currentCameraId, setPreferredCamera, isBlack, frameState } from './vision.js';
 import { scanFace } from './scan.js';
 import { Tracker } from './vtube.js';
 import { rgbToHex, hslToRgb } from './avatar/color.js';
@@ -162,6 +162,12 @@ function poseIdle(t, armsOnly = false) {
   n('leftHand')?.rotation.set(0, 0, 0.1);
   n('rightHand')?.rotation.set(0, 0, -0.1);
   n('chest')?.rotation.set(Math.sin(t * 1.7) * 0.012, 0, 0);
+  // relaxed, slightly curled fingers
+  for (const [side, sg] of [['left', 1], ['right', -1]]) {
+    for (const f of ['Index', 'Middle', 'Ring', 'Little']) for (const ph of ['Proximal', 'Intermediate', 'Distal']) {
+      n(`${side}${f}${ph}`)?.rotation.set(0, 0, sg * (ph === 'Proximal' ? 0.25 : 0.4));
+    }
+  }
   if (armsOnly || tracking) return;
   n('head')?.rotation.set(Math.sin(t * 0.7) * 0.02, Math.sin(t * 0.45) * 0.06, Math.sin(t * 0.6) * 0.02);
   n('neck')?.rotation.set(0, 0, 0);
@@ -354,7 +360,34 @@ async function fillCameraList() {
   sel.innerHTML = '';
   for (const c of cams) { const o = document.createElement('option'); o.value = c.id; o.textContent = c.label; sel.appendChild(o); }
   sel.value = currentCameraId();
-  $('#camPickWrap').hidden = cams.length < 2;
+  $('#camPickWrap').hidden = cams.length < 1;
+}
+let camSettings = {};
+window.api.getSettings().then((st) => {
+  camSettings = st || {};
+  if (camSettings.platform === 'win32') { $('#compatWrap').hidden = false; $('#optCompat').checked = !!camSettings.cameraCompat; }
+});
+$('#optCompat').addEventListener('change', (e) => window.api.setCameraCompat(e.target.checked));
+$('#btnCompat').addEventListener('click', () => window.api.setCameraCompat(!camSettings.cameraCompat));
+function checkPicture() {
+  if (!cameraOn()) return;
+  const st = frameState(camVideo);
+  const help = $('#camHelp');
+  if (st === 'ok' || st === 'none') { help.hidden = true; return; }
+  const many = $('#camSelect').options.length > 1;
+  const win = camSettings.platform === 'win32';
+  const what = st === 'black' ? 'black' : 'one flat colour (often green)';
+  let txt = `Your camera is on, but its picture is ${what} instead of video.`;
+  if (many) txt += ' First try another camera from the list above — laptops often have an infrared "Windows Hello" camera, and OBS/Teams add virtual cameras.';
+  if (win) txt += camSettings.cameraCompat
+    ? ' Compatibility mode is already on. Check the camera works in the Windows Camera app, and update your webcam and graphics drivers.'
+    : ' If that doesn\'t help, switch on compatibility mode: the app restarts and uses the older Windows camera system, which fixes this for most webcams.';
+  else txt += ' Check for a privacy shutter or another app using the camera.';
+  $('#camHelpText').textContent = txt;
+  $('#btnCompat').hidden = !win;
+  $('#btnCompat').textContent = camSettings.cameraCompat ? 'Turn compatibility mode off' : 'Use camera compatibility mode';
+  help.hidden = false;
+  scanMsg("The camera picture is blank — see the tip below");
 }
 async function turnCameraOn() {
   scanMsg('Starting camera…');
@@ -363,13 +396,8 @@ async function turnCameraOn() {
   $('#btnScan').disabled = false;
   scanMsg('Fit your face inside the oval');
   fillCameraList();
-  setTimeout(() => {
-    if (cameraOn() && camVideo.videoWidth && isBlack(camVideo)) {
-      scanMsg($('#camSelect').options.length > 1
-        ? 'The picture is black. Pick a different camera from the list above (virtual cameras like OBS often show black).'
-        : 'The picture is black. Open your camera\'s privacy shutter or check that no other app is using it.');
-    }
-  }, 2500);
+  setTimeout(checkPicture, 2500);
+  setTimeout(checkPicture, 6000);
   getLandmarker((m) => scanMsg(m)).then(() => { if (!isBlack(camVideo)) scanMsg('Fit your face inside the oval, then press Scan'); }).catch((e) => scanMsg(e.message));
 }
 $('#btnCam').addEventListener('click', async () => {
@@ -393,6 +421,7 @@ $('#btnScan').addEventListener('click', async () => {
   btn.disabled = true;
   try {
     const lm = await getLandmarker((m) => scanMsg(m));
+    if (frameState(camVideo) !== 'ok') { checkPicture(); return; }
     for (const n of [3, 2, 1]) { $('#scanCount').textContent = n; await new Promise((r) => setTimeout(r, 650)); }
     $('#scanCount').textContent = '';
     const patch = await scanFace(camVideo, lm, { onProgress: (p, m) => scanMsg(`${m} ${Math.round(p * 100)}%`) });
@@ -524,6 +553,12 @@ window.api.selftestInfo().then(async (info) => {
           setView('face', true); vrm.update(0.016); renderer.render(scene, camera);
           await window.api.selftestWrite(`${name}-expr-${ex}.png`, canvas.toDataURL('image/png'));
         }
+        for (const e of ['blink', 'aa', 'happy', 'Surprised', 'angry', 'sad']) vrm.expressionManager.setValue(e, 0);
+        vrm.lookAt.autoUpdate = false; vrm.lookAt.target = null; vrm.lookAt.yaw = 25; vrm.lookAt.pitch = 0; vrm.update(0.016);
+        renderer.render(scene, camera); await window.api.selftestWrite(`${name}-look-left.png`, canvas.toDataURL('image/png'));
+        const hand = vrm.humanoid.getNormalizedBoneNode('leftHand'); const hp = new THREE.Vector3(); hand.getWorldPosition(hp);
+        controls.target.copy(hp); camera.position.set(hp.x + 0.25, hp.y + 0.05, hp.z + 0.3); controls.update(); poseIdle(1); vrm.update(0.016);
+        renderer.render(scene, camera); await window.api.selftestWrite(`${name}-hand.png`, canvas.toDataURL('image/png'));
         tracking = false; delete tracker.apply;
         const { buffer } = await exportAvatar(params, 'vrm');
         await window.api.selftestWrite(`${name}.vrm`, new Uint8Array(buffer));

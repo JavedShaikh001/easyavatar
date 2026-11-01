@@ -50,6 +50,11 @@
           <button class="btn" id="btnCam">Turn on camera</button>
           <button class="btn primary grow" id="btnScan" disabled>Scan my face</button>
         </div>
+        <div class="cam-help" id="camHelp" hidden>
+          <p id="camHelpText"></p>
+          <button class="btn small primary" id="btnCompat">Use camera compatibility mode</button>
+        </div>
+        <label class="check small-check" id="compatWrap" hidden><input type="checkbox" id="optCompat"> Camera compatibility mode (restarts the app)</label>
         <div class="scan-result" id="scanResult" hidden>
           <div class="swatches">
             <div><i id="swSkin"></i>Skin</div><div><i id="swHair"></i>Hair</div><div><i id="swEye"></i>Eyes</div>

@@ -17,6 +17,19 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
 ]);
 
+// ---- camera compatibility (Windows) ----
+// Some webcams + Intel/AMD graphics deliver solid green or black frames through Chromium's newer
+// Media Foundation / D3D11 capture path. We always skip the D3D11 zero-copy path, and "compatibility
+// mode" (toggled from the app) switches capture to the older DirectShow pipeline.
+const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
+function readSettings() { try { return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); } catch { return {}; } }
+const settings = readSettings();
+if (process.platform === 'win32') {
+  const off = ['MediaFoundationD3D11VideoCapture'];
+  if (settings.cameraCompat) off.push('MediaFoundationVideoCapture');
+  app.commandLine.appendSwitch('disable-features', off.join(','));
+}
+
 // Software WebGL fallback for PCs whose graphics driver is blocklisted (slower, but the app still works).
 app.commandLine.appendSwitch('enable-unsafe-swiftshader');
 if (SELFTEST_DIR) app.commandLine.appendSwitch('ignore-gpu-blocklist');
@@ -108,6 +121,15 @@ ipcMain.handle('open-file', async (_e, { filters }) => {
 });
 
 ipcMain.handle('show-in-folder', (_e, p) => shell.showItemInFolder(p));
+ipcMain.handle('get-settings', () => ({ ...readSettings(), platform: process.platform }));
+ipcMain.handle('set-camera-compat', async (_e, on) => {
+  const cur = readSettings();
+  cur.cameraCompat = !!on;
+  await fs.promises.mkdir(path.dirname(SETTINGS_FILE), { recursive: true });
+  await fs.promises.writeFile(SETTINGS_FILE, JSON.stringify(cur, null, 2));
+  app.relaunch();
+  app.exit(0);
+});
 
 // --- self-test hooks (only active when EASYAVATAR_SELFTEST is set) ---
 ipcMain.handle('selftest-info', () => (SELFTEST_DIR ? { dir: SELFTEST_DIR } : null));

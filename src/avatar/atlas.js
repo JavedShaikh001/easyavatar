@@ -11,13 +11,14 @@ const R = {
   hair: [512, 0, 64, 512],
   eyeWhite: [0, 512, 256, 256], iris: [256, 512, 256, 256], lash: [512, 512, 256, 256],
   brow: [768, 512, 256, 64], mouth: [768, 576, 256, 128], blush: [768, 704, 128, 64], nose: [896, 704, 64, 64],
+  eyeball: [768, 768, 256, 256],
 };
-const SWATCHES = ['skin', 'top', 'bottom', 'shoe', 'sock', 'tie', 'white', 'inner', 'hair'];
+const SWATCHES = ['skin', 'top', 'bottom', 'shoe', 'sock', 'tie', 'white', 'inner', 'hair', 'eyeball'];
 
 export function atlasRects() {
   const out = {};
   for (const [k, [x, y, w, h]] of Object.entries(R)) {
-    const inset = SWATCHES.includes(k) ? (k === 'hair' ? [12, 4] : [16, 16]) : [1, 1];
+    const inset = k === 'eyeball' ? [2, 2] : SWATCHES.includes(k) ? (k === 'hair' ? [12, 4] : [16, 16]) : [1, 1];
     out[k] = { u0: (x + inset[0]) / S, v0: (y + inset[1]) / S, u1: (x + w - inset[0]) / S, v1: (y + h - inset[1]) / S };
   }
   return out;
@@ -81,7 +82,7 @@ export function drawAtlas(P, { shade = false } = {}) {
     const base = C.hair;
     g.addColorStop(0, adjust(base, { dl: 0.95 }));
     g.addColorStop(0.16, base);
-    if (!shade) {
+    if (!shade && P.style !== 'real') {
       g.addColorStop(0.2, C.hairHi);
       g.addColorStop(0.235, C.hairHi);
       g.addColorStop(0.26, base);
@@ -90,6 +91,32 @@ export function drawAtlas(P, { shade = false } = {}) {
     g.addColorStop(1, adjust(base, { dl: 0.8 }));
     ctx.fillStyle = g;
     ctx.fillRect(x, y, w, h);
+    if (P.style === 'real') {
+      // fine strands running along the hair
+      let seed = 7;
+      const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+      for (let i = 0; i < 90; i++) {
+        const sx = x + rnd() * w;
+        ctx.strokeStyle = rnd() < 0.5 ? 'rgba(0,0,0,0.22)' : (shade ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.13)');
+        ctx.lineWidth = 0.6 + rnd() * 1.2;
+        ctx.beginPath(); ctx.moveTo(sx, y); ctx.lineTo(sx + (rnd() - 0.5) * 3, y + h); ctx.stroke();
+      }
+    }
+  }
+  // eyeball: sclera with the iris at the sprite centre (= front of the sphere)
+  {
+    const [x, y, w, h] = R.eyeball;
+    const cx = x + w / 2, cy = y + h / 2;
+    ctx.fillStyle = shade ? '#cfc9c4' : '#f1ece6';
+    ctx.fillRect(x, y, w, h);
+    const ir = w * 0.105;
+    const g = ctx.createRadialGradient(cx, cy, ir * 0.3, cx, cy, ir);
+    g.addColorStop(0, adjust(C.iris, { dl: 0.7 }));
+    g.addColorStop(0.75, adjust(C.iris, { dl: 1.05 }));
+    g.addColorStop(1, adjust(C.iris, { dl: 0.45 }));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, ir, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#0d0b0c'; ctx.beginPath(); ctx.arc(cx, cy, ir * 0.38, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.beginPath(); ctx.arc(cx - ir * 0.35, cy - ir * 0.35, ir * 0.14, 0, Math.PI * 2); ctx.fill();
   }
   // eye white
   {

@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('api', {
   saveFile: (opts) => ipcRenderer.invoke('save-file', opts),
   openFile: (opts) => ipcRenderer.invoke('open-file', opts),
   showInFolder: (p) => ipcRenderer.invoke('show-in-folder', p),
+  getSettings: () => ipcRenderer.invoke('get-settings'),
+  setCameraCompat: (on) => ipcRenderer.invoke('set-camera-compat', on),
   selftestInfo: () => ipcRenderer.invoke('selftest-info'),
   selftestWrite: (name, data) => ipcRenderer.invoke('selftest-write', name, data),
   selftestDone: (code) => ipcRenderer.invoke('selftest-done', code),

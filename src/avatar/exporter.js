@@ -32,8 +32,8 @@ function mtoon(name, mainTex, shadeTex, { cutout, outline, real }) {
   return {
     name, shader: 'VRM/MToon', renderQueue: cutout ? 2450 : 2000,
     floatProperties: {
-      _Cutoff: 0.5, _BumpScale: 1, _ReceiveShadowRate: 1, _ShadingGradeRate: 1, _ShadeShift: real ? -0.2 : -0.05, _ShadeToony: real ? 0.45 : 0.92,
-      _LightColorAttenuation: 0, _IndirectLightIntensity: real ? 0.3 : 0.15, _RimLightingMix: 0, _RimFresnelPower: 1, _RimLift: 0,
+      _Cutoff: 0.5, _BumpScale: 1, _ReceiveShadowRate: 1, _ShadingGradeRate: 1, _ShadeShift: real ? -0.25 : -0.05, _ShadeToony: real ? 0.12 : 0.92,
+      _LightColorAttenuation: 0, _IndirectLightIntensity: real ? 0.35 : 0.15, _RimLightingMix: real ? 1 : 0, _RimFresnelPower: real ? 4 : 1, _RimLift: 0,
       _OutlineWidth: outline ? 0.11 : 0, _OutlineScaledMaxDistance: 1, _OutlineLightingMix: 1,
       _UvAnimScrollX: 0, _UvAnimScrollY: 0, _UvAnimRotation: 0, _MToonVersion: 38, _DebugMode: 0,
       _BlendMode: cutout ? 1 : 0, _OutlineWidthMode: outline ? 1 : 0, _OutlineColorMode: 1, _CullMode: 2, _OutlineCullMode: 1,
@@ -41,7 +41,7 @@ function mtoon(name, mainTex, shadeTex, { cutout, outline, real }) {
     },
     vectorProperties: {
       _Color: [1, 1, 1, 1], _ShadeColor: [1, 1, 1, 1], _MainTex: [0, 0, 1, 1], _ShadeTexture: [0, 0, 1, 1],
-      _OutlineColor: [0.22, 0.16, 0.17, 1], _EmissionColor: [0, 0, 0, 1], _RimColor: [0, 0, 0, 1],
+      _OutlineColor: [0.22, 0.16, 0.17, 1], _EmissionColor: [0, 0, 0, 1], _RimColor: real ? [0.22, 0.2, 0.2, 1] : [0, 0, 0, 1],
     },
     textureProperties: { _MainTex: mainTex, _ShadeTexture: shadeTex },
     keywordMap: Object.assign({}, cutout ? { _ALPHATEST_ON: true } : {}, outline ? { MTOON_OUTLINE_WIDTH_WORLD: true, MTOON_OUTLINE_COLOR_MIXED: true } : {}),
@@ -99,7 +99,7 @@ class VRMWriterPlugin {
         commercialUssageName: 'Disallow', otherPermissionUrl: '', licenseName: 'Redistribution_Prohibited', otherLicenseUrl: '',
       },
       humanoid: {
-        humanBones: Object.entries(HUMAN_BONES).map(([bone, name]) => ({ bone, node: node(real.boneObjs[name]), useDefaultValues: true })),
+        humanBones: Object.entries(HUMAN_BONES).filter(([, name]) => real.boneObjs[name]).map(([bone, name]) => ({ bone, node: node(real.boneObjs[name]), useDefaultValues: true })),
         armStretch: 0.05, legStretch: 0.05, upperArmTwist: 0.5, lowerArmTwist: 0.5, upperLegTwist: 0.5, lowerLegTwist: 0.5,
         feetSpacing: 0, hasTranslationDoF: false,
       },
@@ -107,11 +107,20 @@ class VRMWriterPlugin {
         firstPersonBone: node(real.boneObjs.Head),
         firstPersonBoneOffset: { x: 0, y: 0.06 * s, z: 0 },
         meshAnnotations: [{ mesh: bodyMesh, firstPersonFlag: 'Auto' }, { mesh: faceMesh, firstPersonFlag: 'Auto' }],
-        lookAtTypeName: 'BlendShape',
-        lookAtHorizontalInner: { curve, xRange: 20, yRange: 1 },
-        lookAtHorizontalOuter: { curve, xRange: 20, yRange: 1 },
-        lookAtVerticalDown: { curve, xRange: 15, yRange: 1 },
-        lookAtVerticalUp: { curve, xRange: 15, yRange: 1 },
+        // realistic style turns real eyeballs on eye bones; anime style slides the irises with blend shapes
+        ...(real.boneObjs.LeftEye ? {
+          lookAtTypeName: 'Bone',
+          lookAtHorizontalInner: { curve, xRange: 30, yRange: 14 },
+          lookAtHorizontalOuter: { curve, xRange: 30, yRange: 16 },
+          lookAtVerticalDown: { curve, xRange: 25, yRange: 10 },
+          lookAtVerticalUp: { curve, xRange: 25, yRange: 9 },
+        } : {
+          lookAtTypeName: 'BlendShape',
+          lookAtHorizontalInner: { curve, xRange: 20, yRange: 1 },
+          lookAtHorizontalOuter: { curve, xRange: 20, yRange: 1 },
+          lookAtVerticalDown: { curve, xRange: 15, yRange: 1 },
+          lookAtVerticalUp: { curve, xRange: 15, yRange: 1 },
+        }),
       },
       blendShapeMaster: {
         blendShapeGroups: GROUPS.map(([name, presetName, binds]) => ({

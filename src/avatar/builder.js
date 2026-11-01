@@ -5,7 +5,9 @@ import * as THREE from 'three';
 import { MeshBuilder, loft, sphereGrid, FrontZMap, lerp, clamp, smooth, V, rectUV } from './geom.js';
 import { atlasRects } from './atlas.js';
 import { CANON_POS, CANON_UV } from './canonicalFace.js';
-import { FACE_TRIS, faceMorphs } from './realFace.js';
+import { FACE_TRIS, faceMorphs, EYES } from './realFace.js';
+
+const EYE_HOLE = new Set([...EYES.L.ring, ...EYES.R.ring]);
 
 export const MORPHS = [
   'blinkL', 'blinkR', 'mouthA', 'mouthI', 'mouthU', 'mouthE', 'mouthO', 'smile', 'frown',
@@ -19,7 +21,13 @@ export const HUMAN_BONES = {
   rightShoulder: 'RightShoulder', rightUpperArm: 'RightUpperArm', rightLowerArm: 'RightLowerArm', rightHand: 'RightHand',
   leftUpperLeg: 'LeftUpperLeg', leftLowerLeg: 'LeftLowerLeg', leftFoot: 'LeftFoot', leftToes: 'LeftToes',
   rightUpperLeg: 'RightUpperLeg', rightLowerLeg: 'RightLowerLeg', rightFoot: 'RightFoot', rightToes: 'RightToes',
+  leftEye: 'LeftEye', rightEye: 'RightEye',
 };
+export const FINGERS = ['Thumb', 'Index', 'Middle', 'Ring', 'Little'];
+export const PHALANGES = ['Proximal', 'Intermediate', 'Distal'];
+for (const side of ['Left', 'Right']) for (const f of FINGERS) for (const ph of PHALANGES) {
+  HUMAN_BONES[`${side.toLowerCase()}${f}${ph}`] = `${side}${f}${ph}`;
+}
 
 const DEG = Math.PI / 180;
 
@@ -39,6 +47,22 @@ export function describeAvatar(P) {
   const shY = L + 0.405, shX = lerp(0.128, 0.162, b), upLen = 0.25, loLen = 0.235;
   const legX = lerp(0.08, 0.088, b), kneeY = L * 0.52, ankleY = 0.072;
   const wristX = shX + upLen + loLen;
+  const armScale = lerp(0.9, 1.08, b);
+  // finger layout for a palm-down T-pose hand: joints (proximal, intermediate, distal, tip) and radius
+  const fingerDefs = (sx) => {
+    const k = armScale, y = shY - 0.003, z0 = -0.008;
+    const out = [];
+    for (const [name, z, ls, r, kx] of [['Index', 0.025, 0.93, 0.0082, 0.06], ['Middle', 0.008, 1, 0.0085, 0.062], ['Ring', -0.009, 0.95, 0.008, 0.06], ['Little', -0.025, 0.76, 0.0068, 0.055]]) {
+      const x0 = wristX + kx * k, L1 = 0.03 * ls * k, L2 = 0.022 * ls * k, L3 = 0.019 * ls * k;
+      const zz = z0 + z * k;
+      out.push({ name, r: r * k, joints: [[sx * x0, y, zz], [sx * (x0 + L1), y, zz], [sx * (x0 + L1 + L2), y, zz], [sx * (x0 + L1 + L2 + L3), y, zz]] });
+    }
+    const base = [sx * (wristX + 0.014 * k), shY - 0.009, z0 + 0.024 * k];
+    const d = V.norm([sx * 0.78, -0.22, 0.58]);
+    const tj = [0, 0.032, 0.058, 0.08].map((t) => V.add(base, V.mul(d, t * k)));
+    out.unshift({ name: 'Thumb', r: 0.0105 * k, joints: tj });
+    return out;
+  };
 
   bone('Hips', null, [0, Y.hips, 0]);
   bone('Spine', 'Hips', [0, Y.spine, -0.005]);
@@ -51,6 +75,7 @@ export function describeAvatar(P) {
     bone(side + 'UpperArm', side + 'Shoulder', [sx * shX, shY, -0.01]);
     bone(side + 'LowerArm', side + 'UpperArm', [sx * (shX + upLen), shY, -0.01]);
     bone(side + 'Hand', side + 'LowerArm', [sx * wristX, shY, -0.01]);
+    for (const fd of fingerDefs(sx)) fd.joints.slice(0, 3).forEach((p, j) => bone(side + fd.name + PHALANGES[j], j ? side + fd.name + PHALANGES[j - 1] : side + 'Hand', p));
     bone(side + 'UpperLeg', 'Hips', [sx * legX, L, 0]);
     bone(side + 'LowerLeg', side + 'UpperLeg', [sx * legX * 0.96, kneeY, 0.005]);
     bone(side + 'Foot', side + 'LowerLeg', [sx * legX * 0.92, ankleY, -0.005]);
@@ -135,7 +160,6 @@ export function describeAvatar(P) {
   })), { seg: 16 });
 
   // ---------- arms & hands ----------
-  const armScale = lerp(0.9, 1.08, b);
   const armTable = [
     [0.085, 0.05], [shX - 0.01, 0.046], [shX + 0.06, 0.042], [shX + 0.13, 0.038], [shX + upLen - 0.005, 0.032],
     [shX + upLen + 0.05, 0.034], [shX + upLen + 0.14, 0.03], [wristX, 0.025],
@@ -158,18 +182,34 @@ export function describeAvatar(P) {
       return { c: [sx * x, shY, -0.01], n: [0, 1, 0], w: r, df: r * 0.92, db: r * 0.92, wt: armW, rect: R[rg] };
     }), { seg: 14 });
 
-    // mitten-style hand, palm down
+    // palm (palm down) + five jointed fingers
     const handW = (pt) => (Math.abs(pt[0]) < wristX + 0.008 ? blend(sd + 'LowerArm', sd + 'Hand', 0.7) : [W(sd + 'Hand')]);
     loft(body, [
-      [0, 0.026, 0.02, 0.019], [0.025, 0.037, 0.019, 0.017], [0.052, 0.041, 0.016, 0.014], [0.078, 0.037, 0.012, 0.011], [0.096, 0.02, 0.008, 0.008],
+      [0, 0.026, 0.02, 0.019], [0.022, 0.036, 0.019, 0.017], [0.045, 0.04, 0.016, 0.014], [0.064, 0.037, 0.012, 0.011],
     ].map(([dx, w, up, dn]) => ({
-      c: [sx * (wristX + dx), shY - 0.002, -0.007], n: [0, 1, 0], w: w * armScale, df: up * armScale, db: dn * armScale, wt: handW, rect: R.skin,
-    })), { seg: 12, capEnd: true, capExt: 0.006 });
-    loft(body, [
-      [0.018, -0.006, 0.012, 0.012], [0.04, -0.011, 0.032, 0.0105], [0.056, -0.014, 0.044, 0.008],
-    ].map(([dx, dy, z, r]) => ({
-      c: [sx * (wristX + dx), shY + dy, z], n: [0, 1, 0], w: r * armScale, df: r * armScale * 0.9, db: r * armScale * 0.9, wt: [W(sd + 'Hand')], rect: R.skin,
-    })), { seg: 8, capEnd: true, capExt: 0.004 });
+      c: [sx * (wristX + dx * armScale), shY - 0.002, -0.008], n: [0, 1, 0], w: w * armScale, df: up * armScale, db: dn * armScale, wt: handW, rect: R.skin,
+    })), { seg: 12, capEnd: true, capExt: 0.005 });
+    for (const fd of fingerDefs(sx)) {
+      const names = PHALANGES.map((ph) => sd + fd.name + ph);
+      const J = fd.joints;
+      const dir = V.norm(V.sub(J[3], J[0]));
+      const along = (q) => V.dot(V.sub(q, J[0]), dir);
+      const t1 = along(J[1]), t2 = along(J[2]), bw = 0.004;
+      const segW = (p) => {
+        const a = along(p);
+        if (a < 0) return blend(sd + 'Hand', names[0], 0.5);
+        if (a < t1 - bw) return [W(names[0])];
+        if (a < t1 + bw) return blend(names[0], names[1], (a - (t1 - bw)) / (2 * bw));
+        if (a < t2 - bw) return [W(names[1])];
+        if (a < t2 + bw) return blend(names[1], names[2], (a - (t2 - bw)) / (2 * bw));
+        return [W(names[2])];
+      };
+      const back = V.sub(J[0], V.mul(dir, fd.name === 'Thumb' ? 0.012 : 0.008));
+      const mid = (a, c, t) => V.add(V.mul(a, 1 - t), V.mul(c, t));
+      const pts = [[back, 1.05], [J[0], 1], [mid(J[0], J[1], 0.5), 0.95], [J[1], 0.92], [J[2], 0.86], [mid(J[2], J[3], 0.6), 0.8], [J[3], 0.7]];
+      loft(body, pts.map(([c, k]) => ({ c, n: [0, 1, 0], w: fd.r * k, df: fd.r * k * 0.85, db: fd.r * k * 0.8, wt: segW, rect: R.skin })),
+        { seg: 8, capEnd: true, capExt: fd.r * 0.6 });
+    }
   }
 
   // ---------- legs ----------
@@ -345,23 +385,28 @@ export function describeAvatar(P) {
     }), { seg, capEnd: true, capExt: 0.002 });
   };
   const headOnly = () => [W('Head')];
+  const tip = (t, p) => (real ? 1 - 0.72 * Math.pow(t, p) : 1 - Math.pow(t, p)); // realistic hair ends softly
+  const hairW = real ? 0.68 : 1;
 
   // bangs
   const bangDefs = [];
   if (P.bangs === 'parted') {
-    for (const sx of [1, -1]) for (let i = 0; i < 5; i++) {
-      const f = i / 4, phi0 = sx * lerp(6, 64, f) * DEG;
-      bangDefs.push({ phi0, phi1: phi0 + sx * 14 * DEG, y1: lerp(0.3, 0.0, f) + (i % 2 ? 0.05 : 0) });
+    const nb = real ? 8 : 5;
+    for (const sx of [1, -1]) for (let i = 0; i < nb; i++) {
+      const f = i / (nb - 1), phi0 = sx * lerp(6, 64, f) * DEG;
+      bangDefs.push({ phi0, phi1: phi0 + sx * 14 * DEG, y1: lerp(0.3, 0.0, f) + (i % 2 ? (real ? 0.02 : 0.05) : 0) });
     }
   } else if (P.bangs === 'side') {
-    for (let i = 0; i < 9; i++) {
-      const f = i / 8, phi0 = lerp(-64, 64, f) * DEG;
-      bangDefs.push({ phi0, phi1: phi0 + 28 * DEG * (1 - Math.abs(phi0) / (90 * DEG)), y1: lerp(0.2, -0.02, f) + (i % 2 ? 0.05 : 0) });
+    const nb = real ? 14 : 9;
+    for (let i = 0; i < nb; i++) {
+      const f = i / (nb - 1), phi0 = lerp(-64, 64, f) * DEG;
+      bangDefs.push({ phi0, phi1: phi0 + 28 * DEG * (1 - Math.abs(phi0) / (90 * DEG)), y1: lerp(0.2, -0.02, f) + (i % 2 ? (real ? 0.02 : 0.05) : 0) });
     }
   } else {
-    for (let i = 0; i < 9; i++) {
-      const f = i / 8, phi0 = lerp(-64, 64, f) * DEG;
-      bangDefs.push({ phi0, phi1: phi0 * 1.05, y1: lerp(0.1, -0.02, Math.abs(phi0) / (64 * DEG)) + (i % 2 ? 0.06 : 0) });
+    const nb = real ? 14 : 9;
+    for (let i = 0; i < nb; i++) {
+      const f = i / (nb - 1), phi0 = lerp(-64, 64, f) * DEG;
+      bangDefs.push({ phi0, phi1: phi0 * 1.05, y1: lerp(0.1, -0.02, Math.abs(phi0) / (64 * DEG)) + (i % 2 ? (real ? 0.02 : 0.06) : 0) });
     }
   }
   for (const d of bangDefs) {
@@ -371,7 +416,7 @@ export function describeAvatar(P) {
       const p = headPt(dirFrom(lerp(d.phi0, d.phi1, Math.pow(t, 1.5)), lerp(0.88, d.y1, t)), 1.072 + 0.028 * t);
       pts.push(p); nrm.push(headNormal(p));
     }
-    strand(pts, nrm, (t) => 0.0165 * hs * (1 - Math.pow(t, 2.2)) * (t < 0.1 ? 0.7 + 3 * t : 1), (t) => 0.011 * hs * (1 - 0.7 * t), headOnly);
+    strand(pts, nrm, (t) => 0.0165 * hs * hairW * tip(t, 2.2) * (t < 0.1 ? 0.7 + 3 * t : 1), (t) => 0.011 * hs * (1 - 0.7 * t), headOnly);
   }
 
   // side locks
@@ -387,7 +432,7 @@ export function describeAvatar(P) {
       springs.push({ comment: 'Side hair', root: chain.names[0], stiff: 1.2 });
     }
     sideChains[sx] = chain;
-    for (const phiD of [80, 96]) {
+    for (const phiD of real ? [76, 84, 92, 100] : [80, 96]) {
       const phi = sx * phiD * DEG;
       const yEndHead = sideEnd === null ? -0.32 : -0.12;
       const pts = [], nrm = [];
@@ -413,7 +458,7 @@ export function describeAvatar(P) {
         const ws = [[bi[chain.names[j]], 1 - k * 0.5], [bi[chain.names[Math.min(2, j + 1)]], k * 0.5]];
         return s < 0.1 ? [...ws, W('Head', 1 - s * 10)] : ws;
       };
-      strand(pts, nrm, (t) => 0.0165 * hs * (1 - Math.pow(t, 2.5)), (t) => 0.012 * hs * (1 - 0.6 * t), wt);
+      strand(pts, nrm, (t) => 0.0165 * hs * hairW * tip(t, 2.5), (t) => 0.012 * hs * (1 - 0.6 * t), wt);
     }
   }
 
@@ -457,7 +502,7 @@ export function describeAvatar(P) {
       springs.push({ comment: 'Back hair', root: names[0], stiff: style === 'long' ? 0.7 : 1.1 });
     });
   }
-  const nBack = 13;
+  const nBack = real ? 21 : 13;
   for (let i = 0; i < nBack; i++) {
     const phi = lerp(100, 260, i / (nBack - 1)) * DEG;
     const { pts, nrm, headCount } = backPath(phi);
@@ -478,7 +523,7 @@ export function describeAvatar(P) {
       return out;
     };
     const tipW = style === 'long' ? 0.022 : 0.019;
-    strand(pts, nrm, (t) => tipW * hs * (longish ? (1 - Math.pow(t, 3)) : (1 - Math.pow(t, 2))), (t) => 0.013 * hs * (1 - 0.5 * t), wt);
+    strand(pts, nrm, (t) => tipW * hs * hairW * (longish ? tip(t, 3) : tip(t, 2)), (t) => 0.013 * hs * (1 - 0.5 * t), wt);
   }
 
   // ponytail
@@ -527,7 +572,11 @@ export function describeAvatar(P) {
     const { src, uvs, k, toW } = realFace;
     const n = src.length / 3;
     for (let i = 0; i < n; i++) face.v(toW([src[i * 3], src[i * 3 + 1], src[i * 3 + 2]]), [uvs[i * 2], uvs[i * 2 + 1]], [W('Head')]);
-    for (let i = 0; i < FACE_TRIS.length; i += 3) face.tri(FACE_TRIS[i], FACE_TRIS[i + 1], FACE_TRIS[i + 2]);
+    for (let i = 0; i < FACE_TRIS.length; i += 3) {
+      const t = [FACE_TRIS[i], FACE_TRIS[i + 1], FACE_TRIS[i + 2]];
+      if (t.every((v) => EYE_HOLE.has(v))) continue; // the eyeballs show through here
+      face.tri(...t);
+    }
     for (const [name, m] of Object.entries(faceMorphs(src))) for (const [i, d] of m) face.morph(name, i, [d[0] * k, d[1] * k, d[2] * k]);
     // dark mouth cavity behind the lips, seen when the jaw opens
     const a = toW([src[13 * 3], src[13 * 3 + 1], src[13 * 3 + 2]]), b = toW([src[14 * 3], src[14 * 3 + 1], src[14 * 3 + 2]]);
@@ -535,6 +584,24 @@ export function describeAvatar(P) {
     const mc = [0, (a[1] + b[1]) / 2 - 0.006, Math.min(a[2], b[2]) - 0.014];
     const mr = [Math.abs(cL[0]) * 0.85, 0.016, 0.012];
     sphereGrid(body, 8, 12, (d) => ({ p: [mc[0] + d[0] * mr[0], mc[1] + d[1] * mr[1], mc[2] + d[2] * mr[2]], uv: rectUV(R.inner, 0.5, 0.5), wt: [W('Head')] }));
+    // upper teeth just behind the upper lip
+    const tc = [0, a[1] - 0.001, a[2] - 0.011];
+    sphereGrid(body, 6, 12, (d) => ({ p: [tc[0] + d[0] * mr[0] * 0.78, tc[1] + d[1] * 0.0045, tc[2] + d[2] * 0.007], uv: rectUV(R.white, 0.5, 0.5), wt: [W('Head')] }));
+    // eyeballs on eye bones (VRM bone look-at), centred behind each eye opening
+    for (const [sd, ring] of [['Left', EYES.L.ring], ['Right', EYES.R.ring]]) {
+      const pts = ring.map((i) => toW([src[i * 3], src[i * 3 + 1], src[i * 3 + 2]]));
+      const c = pts.reduce((acc, q) => V.add(acc, V.mul(q, 1 / pts.length)), [0, 0, 0]);
+      const front = Math.max(...pts.map((q) => q[2]));
+      const width = Math.max(...pts.map((q) => q[0])) - Math.min(...pts.map((q) => q[0]));
+      const er = Math.max(0.0105, width * 0.48);
+      const ec = [c[0], c[1], front - er - 0.0004];
+      bone(sd + 'Eye', 'Head', ec);
+      sphereGrid(body, 16, 20, (d) => {
+        const th = Math.acos(clamp(d[2], -1, 1)), rr = Math.hypot(d[0], d[1]) || 1;
+        const k = (th / Math.PI) * 0.5;
+        return { p: [ec[0] + d[0] * er, ec[1] + d[1] * er, ec[2] + d[2] * er], uv: rectUV(R.eyeball, 0.5 + (d[0] / rr) * k, 0.5 - (d[1] / rr) * k), wt: [W(sd + 'Eye')] };
+      });
+    }
     const eyeR = toW([src[159 * 3], src[159 * 3 + 1], src[159 * 3 + 2]]);
     eyeWorldY = eyeR[1];
   } else {
