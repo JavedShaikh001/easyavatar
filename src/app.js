@@ -5,6 +5,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { DEFAULTS, SLIDERS, CHOICES, normalizeParams } from './avatar/params.js';
 import { exportAvatar } from './avatar/exporter.js';
+import { exportUnrealPackage } from './avatar/unrealExport.js';
 import { getLandmarker, startCamera, stopCamera, attach, cameraOn, listCameras, currentCameraId, setPreferredCamera, isBlack, frameState } from './vision.js';
 import { scanFace } from './scan.js';
 import { Tracker } from './vtube.js';
@@ -317,6 +318,12 @@ $$('[data-export]').forEach((b) => b.addEventListener('click', async () => {
   const kind = b.dataset.export;
   busy(true);
   try {
+    if (kind === 'unreal') {
+      const zip = await exportUnrealPackage(params);
+      const p = await window.api.saveFile({ defaultPath: `${safeName()}-Unreal.zip`, filters: [{ name: 'Zip folder', extensions: ['zip'] }], data: zip });
+      if (p) toast(params.faceScan ? 'Exported for Unreal. Unzip it and follow README-Unreal.txt.' : 'Exported for Unreal. Tip: scan your face first so the MetaHuman looks like you.', 8000, { label: 'Show file', run: () => window.api.showInFolder(p) });
+      return;
+    }
     const { buffer } = await exportAvatar(params, kind);
     const p = await window.api.saveFile({
       defaultPath: `${safeName()}.${kind}`,
@@ -718,6 +725,7 @@ window.api.selftestInfo().then(async (info) => {
         tracking = false; delete tracker.apply;
         const { buffer } = await exportAvatar(params, 'vrm');
         await window.api.selftestWrite(`${name}.vrm`, new Uint8Array(buffer));
+        if (name === 'real-scan') await window.api.selftestWrite('unreal.zip', await exportUnrealPackage(params));
         log('real ok', name, buffer.byteLength);
         continue;
       }

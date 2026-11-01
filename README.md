@@ -8,6 +8,7 @@ Turn your webcam face into an anime-style 3D character, VTube with it live, and 
 - **Clothes from a picture** – put a photo of a print or logo on the front of the top, or use a fabric photo as a repeating pattern on the top or bottom (crop the part you want; the garment colour is matched automatically).
 - **Customise** – sliders for face and body, 4 hairstyles × 3 bangs, outfits (T-shirt / long sleeve / tank, pants / shorts / skirt) with colour pickers, undo (Ctrl+Z), save/open `.easyavatar` files, "Surprise me".
 - **VTube** – your character copies your head, blinks, eyes and mouth from the webcam. Green/blue screen backgrounds, expression hotkeys (1–5, 0 to reset), and a "hide controls" mode for OBS window capture.
+- **Unreal Engine / MetaHuman** – Export → *Unreal Engine / MetaHuman* saves a zip with the rigged character (`Avatar.glb`), a realistic static head from your scan (`Head_for_MetaHuman.obj` + textures) ready for MetaHuman "From Mesh" in Unreal Engine 5.6+, and step-by-step instructions.
 - **Export** – `.vrm` (VRM 0.x: humanoid rig, 18 expressions incl. lip-sync vowels and blinks, spring-bone hair, MToon toon shading) for VSeeFace, Warudo, VTube Studio, VRChat converters and Unity + UniVRM; `.glb` for Unity (glTFast), Blender, Godot.
 
 ## Install
