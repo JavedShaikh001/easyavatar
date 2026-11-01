@@ -17,6 +17,8 @@ export const DEFAULTS = {
   // outfit
   top: 'tshirt', topColor: '#5b7cfa', bottom: 'pants', bottomColor: '#2e3a52',
   shoeColor: '#f2f2f2', socks: true, sockColor: '#f4f4f4',
+  // garments from a picture (small JPEG data URLs)
+  topImage: null, topImageMode: 'print', bottomImage: null, bottomImageMode: 'pattern',
 };
 
 export const SLIDERS = {

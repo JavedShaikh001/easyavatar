@@ -149,8 +149,10 @@ export async function exportAvatar(params, kind = 'vrm') {
   // the realistic style uses the true (photo) skin colour so the face blends into the body
   const P = scanned && fs.skin ? { ...params, skinColor: fs.skin } : params;
   const desc = describeAvatar(scanned ? P : { ...P, faceScan: null });
-  const atlasTex = canvasTexture(drawAtlas(P));
-  const shadeTex = canvasTexture(drawAtlas(P, { shade: true }));
+  const images = {};
+  for (const part of ['top', 'bottom']) if (P[part + 'Image']) images[part] = await loadImageCanvas(P[part + 'Image'], 0).catch(() => null);
+  const atlasTex = canvasTexture(drawAtlas(P, { images }));
+  const shadeTex = canvasTexture(drawAtlas(P, { shade: true, images }));
   const body = new THREE.MeshBasicMaterial({ map: atlasTex });
   body.name = 'Body';
   let face, faceTex = null, faceShade = null;

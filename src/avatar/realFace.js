@@ -193,7 +193,12 @@ export function photoFaceTexture(video, lm, skin, S = 512) {
 export function loadImageCanvas(dataUrl, S = 512) {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => { const cv = document.createElement('canvas'); cv.width = cv.height = S; cv.getContext('2d').drawImage(img, 0, 0, S, S); resolve(cv); };
+    img.onload = () => {
+      const cv = document.createElement('canvas');
+      cv.width = S || img.naturalWidth; cv.height = S || img.naturalHeight; // S = 0 keeps the picture's own size
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      resolve(cv);
+    };
     img.onerror = () => reject(new Error('Could not read the face photo'));
     img.src = dataUrl;
   });

@@ -259,6 +259,7 @@ function syncUI() {
   const real = params.style === 'real';
   $('#realNote').hidden = !real || !params.faceScan;
   $('#realNoScan').hidden = !real || !!params.faceScan;
+  renderClothList();
 }
 
 // tabs
@@ -390,6 +391,7 @@ function checkPicture() {
   scanMsg("The camera picture is blank — see the tip below");
 }
 async function turnCameraOn() {
+  $('#photoPreview').hidden = true;
   scanMsg('Starting camera…');
   await attach(camVideo, await startCamera());
   $('#btnCam').textContent = 'Turn off camera';
@@ -444,6 +446,145 @@ $('#btnUndoScan').addEventListener('click', () => {
   commit(); syncUI(); scheduleRebuild(0);
   $('#scanResult').hidden = true;
 });
+
+// ---------------- avatar from a photo ----------------
+function fileToImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { resolve(img); setTimeout(() => URL.revokeObjectURL(url), 1000); };
+    img.onerror = () => reject(new Error("That file doesn't look like a picture."));
+    img.src = url;
+  });
+}
+$('#btnPhoto').addEventListener('click', () => $('#photoFile').click());
+$('#photoFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    const img = await fileToImage(file);
+    // scale big photos down; the scanner treats the canvas like a single still video frame
+    const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(img.naturalWidth * k); cv.height = Math.round(img.naturalHeight * k);
+    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+    cv.videoWidth = cv.width; cv.videoHeight = cv.height;
+    const prev = $('#photoPreview');
+    prev.src = cv.toDataURL('image/jpeg', 0.85); prev.hidden = false;
+    $('#camHelp').hidden = true;
+    scanMsg('Reading the photo…');
+    const lm = await getLandmarker((m) => scanMsg(m));
+    const patch = await scanFace(cv, lm, { frames: 3, onProgress: () => scanMsg('Reading the photo…') });
+    preScan = { ...params };
+    Object.assign(params, patch);
+    commit(); syncUI();
+    await scheduleRebuild(0);
+    for (const [id, k2] of [['#swSkin', 'skinColor'], ['#swHair', 'hairColor'], ['#swEye', 'eyeColor']]) $(id).style.background = params[k2];
+    $('#scanResult').hidden = false;
+    scanMsg('Done! Made from your photo. Fine-tune anything in the Face and Hair tabs.');
+    setView('face');
+  } catch (err) {
+    scanMsg(err.message.replace('Please face the camera', 'Use a photo where the face looks') .replace('Move into better light and fill the oval', 'Use a clear, front-facing photo of one face'));
+  }
+});
+
+// ---------------- clothes from a picture ----------------
+let cropState = null;
+const cropCv = $('#cropCanvas');
+function drawCrop() {
+  const { img, rect } = cropState;
+  const g = cropCv.getContext('2d');
+  g.clearRect(0, 0, cropCv.width, cropCv.height);
+  g.drawImage(img, 0, 0, cropCv.width, cropCv.height);
+  if (rect) {
+    g.fillStyle = 'rgba(20,22,40,0.45)';
+    g.beginPath(); g.rect(0, 0, cropCv.width, cropCv.height);
+    g.rect(rect.x, rect.y, rect.w, rect.h); g.fill('evenodd');
+    g.strokeStyle = '#5b6cff'; g.lineWidth = 2; g.strokeRect(rect.x, rect.y, rect.w, rect.h);
+  }
+}
+function setCropMode(m) { cropState.mode = m; $$('#cropMode button').forEach((b) => b.classList.toggle('active', b.dataset.mode === m)); }
+$$('#cropMode button').forEach((b) => b.addEventListener('click', () => setCropMode(b.dataset.mode)));
+let clothPart = 'top';
+$$('[data-cloth]').forEach((b) => b.addEventListener('click', () => { clothPart = b.dataset.cloth; $('#clothFile').click(); }));
+$('#clothFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    const img = await fileToImage(file);
+    const k = Math.min(560 / img.naturalWidth, 380 / img.naturalHeight, 1);
+    cropCv.width = Math.round(img.naturalWidth * k); cropCv.height = Math.round(img.naturalHeight * k);
+    cropState = { img, rect: null, scale: k, mode: params[clothPart + 'ImageMode'] || (clothPart === 'top' ? 'print' : 'pattern') };
+    $('#cropTitle').textContent = clothPart === 'top' ? 'Picture for the top' : 'Picture for the bottom';
+    setCropMode(cropState.mode);
+    drawCrop();
+    $('#cropModal').hidden = false;
+  } catch (err) { toast(err.message); }
+});
+{
+  let start = null;
+  const pos = (ev) => { const r = cropCv.getBoundingClientRect(); return { x: ((ev.clientX - r.left) * cropCv.width) / r.width, y: ((ev.clientY - r.top) * cropCv.height) / r.height }; };
+  cropCv.addEventListener('pointerdown', (ev) => { start = pos(ev); cropCv.setPointerCapture(ev.pointerId); });
+  cropCv.addEventListener('pointermove', (ev) => {
+    if (!start) return;
+    const p = pos(ev);
+    cropState.rect = { x: Math.min(start.x, p.x), y: Math.min(start.y, p.y), w: Math.abs(p.x - start.x), h: Math.abs(p.y - start.y) };
+    drawCrop();
+  });
+  cropCv.addEventListener('pointerup', () => { start = null; if (cropState.rect && (cropState.rect.w < 8 || cropState.rect.h < 8)) { cropState.rect = null; drawCrop(); } });
+}
+$('#cropCancel').addEventListener('click', () => { $('#cropModal').hidden = true; cropState = null; });
+function averageColor(cv, borderOnly) {
+  const g = cv.getContext('2d', { willReadFrequently: true });
+  const d = g.getImageData(0, 0, cv.width, cv.height).data;
+  const px = [];
+  for (let y = 0; y < cv.height; y += 2) for (let x = 0; x < cv.width; x += 2) {
+    if (borderOnly && x > cv.width * 0.12 && x < cv.width * 0.88 && y > cv.height * 0.12 && y < cv.height * 0.88) continue;
+    const i = (y * cv.width + x) * 4;
+    if (d[i + 3] < 128) continue;
+    px.push([d[i], d[i + 1], d[i + 2]]);
+  }
+  if (!px.length) return null;
+  const med = (c) => px.map((p) => p[c]).sort((a, b) => a - b)[px.length >> 1];
+  return rgbToHex([med(0), med(1), med(2)]);
+}
+$('#cropUse').addEventListener('click', () => {
+  const { img, rect, scale, mode } = cropState;
+  const sx = rect ? rect.x / scale : 0, sy = rect ? rect.y / scale : 0;
+  const sw = rect ? rect.w / scale : img.naturalWidth, sh = rect ? rect.h / scale : img.naturalHeight;
+  const k = Math.min(1, 512 / Math.max(sw, sh));
+  const out = document.createElement('canvas');
+  out.width = Math.max(1, Math.round(sw * k)); out.height = Math.max(1, Math.round(sh * k));
+  out.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, out.width, out.height);
+  params[clothPart + 'Image'] = out.toDataURL('image/jpeg', 0.88);
+  params[clothPart + 'ImageMode'] = mode;
+  // garment colour: the picture's background for prints, its overall colour for fabrics
+  const col = averageColor(out, mode === 'print');
+  if (col) params[clothPart + 'Color'] = col;
+  $('#cropModal').hidden = true; cropState = null;
+  commit(); syncUI(); scheduleRebuild(0);
+  setView(clothPart === 'top' ? 'upper' : 'full');
+});
+function renderClothList() {
+  const box = $('#clothList');
+  box.innerHTML = '';
+  for (const part of ['top', 'bottom']) {
+    const src = params[part + 'Image'];
+    if (!src) continue;
+    const item = document.createElement('div');
+    item.className = 'cloth-item';
+    const mode = params[part + 'ImageMode'];
+    item.innerHTML = `<img alt=""><div class="grow"><b>${part === 'top' ? 'Top' : 'Bottom'} picture</b><div class="chips">
+      <button data-m="print" class="${mode === 'print' ? 'active' : ''}">Print</button><button data-m="pattern" class="${mode === 'pattern' ? 'active' : ''}">Pattern</button></div></div>
+      <button class="btn small ghost">Remove</button>`;
+    item.querySelector('img').src = src;
+    item.querySelectorAll('[data-m]').forEach((b) => b.addEventListener('click', () => { params[part + 'ImageMode'] = b.dataset.m; commit(); syncUI(); scheduleRebuild(0); }));
+    item.querySelector('.ghost').addEventListener('click', () => { params[part + 'Image'] = null; commit(); syncUI(); scheduleRebuild(0); });
+    box.appendChild(item);
+  }
+}
 
 // ---------------- VTube tab ----------------
 const pip = $('#pip');
@@ -511,6 +652,20 @@ syncUI();
 rebuild();
 
 // ---------------- self-test (developer only) ----------------
+function testPicture(kind) {
+  const cv = document.createElement('canvas'); cv.width = 200; cv.height = 160;
+  const g = cv.getContext('2d');
+  if (kind === 'plaid') {
+    g.fillStyle = '#7a1f2b'; g.fillRect(0, 0, 200, 160);
+    g.fillStyle = 'rgba(20,30,60,0.6)'; for (let i = 0; i < 200; i += 40) { g.fillRect(i, 0, 14, 160); g.fillRect(0, i, 200, 14); }
+    g.fillStyle = 'rgba(255,220,120,0.5)'; for (let i = 20; i < 200; i += 40) { g.fillRect(i, 0, 3, 160); g.fillRect(0, i, 200, 3); }
+  } else {
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, 200, 160);
+    g.fillStyle = '#ff5a3c'; g.beginPath(); g.arc(100, 70, 46, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#1f2335'; g.font = 'bold 30px sans-serif'; g.textAlign = 'center'; g.fillText('EASY', 100, 150);
+  }
+  return cv.toDataURL('image/jpeg', 0.9);
+}
 // A stand-in for a webcam scan: the canonical face, slightly reshaped, "photographed" by painting it.
 async function fakeScan() {
   const { CANON_POS, CANON_UV } = await import('./avatar/canonicalFace.js');
@@ -538,6 +693,7 @@ window.api.selftestInfo().then(async (info) => {
       ['ponytail-shorts', { hairStyle: 'ponytail', bangs: 'side', bottom: 'shorts', top: 'tank', build: 0.9, hairColor: '#c99a5a', skinColor: '#a8714f', eyeColor: '#3f8a5a' }],
       ['real-default', { style: 'real', hairStyle: 'short', bangs: 'side', hairColor: '#3a2a22', eyeColor: '#5a3b26', skinColor: '#d9a98a' }],
       ['real-scan', { style: 'real', hairStyle: 'long', bangs: 'parted', hairLength: 0.5, hairColor: '#2a1f1c', bottom: 'skirt', faceScan: await fakeScan() }],
+      ['clothes', { top: 'tshirt', topColor: '#ffffff', topImage: testPicture('print'), topImageMode: 'print', bottom: 'skirt', bottomImage: testPicture('plaid'), bottomImageMode: 'pattern' }],
       ['short-masc', { hairStyle: 'short', bangs: 'side', build: 1, headSize: 0.3, jaw: 0.8, eyeSize: 0.3, eyeOpen: 0.3, hairColor: '#151318', skinColor: '#6b4630', topColor: '#2f6d5a' }],
     ];
     for (const [name, patch] of variants) {

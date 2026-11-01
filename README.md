@@ -4,6 +4,8 @@ Turn your webcam face into an anime-style 3D character, VTube with it live, and 
 
 - **Scan** – look at the webcam; EasyAvatar reads your face shape (face length, jaw, eyes, brows, nose, mouth) and your skin, hair and eye colours, and builds a matching character. Everything runs on your computer; no image is uploaded. (For the realistic style, the face photo is stored inside your saved `.easyavatar` file and exported avatar, so share those only with people you trust.)
 - **Two styles** – *Anime* (a VRoid-like stylised character whose face is shaped and coloured from your scan) or *Realistic* (your own scanned 3D face shape with your webcam photo as its skin, on a natural-proportion body). Switch any time in the Scan or Face tab.
+- **From a photo** – no webcam needed: "Or make it from a photo…" builds the character from any clear, front-facing picture of a face.
+- **Clothes from a picture** – put a photo of a print or logo on the front of the top, or use a fabric photo as a repeating pattern on the top or bottom (crop the part you want; the garment colour is matched automatically).
 - **Customise** – sliders for face and body, 4 hairstyles × 3 bangs, outfits (T-shirt / long sleeve / tank, pants / shorts / skirt) with colour pickers, undo (Ctrl+Z), save/open `.easyavatar` files, "Surprise me".
 - **VTube** – your character copies your head, blinks, eyes and mouth from the webcam. Green/blue screen backgrounds, expression hotkeys (1–5, 0 to reset), and a "hide controls" mode for OBS window capture.
 - **Export** – `.vrm` (VRM 0.x: humanoid rig, 18 expressions incl. lip-sync vowels and blinks, spring-bone hair, MToon toon shading) for VSeeFace, Warudo, VTube Studio, VRChat converters and Unity + UniVRM; `.glb` for Unity (glTFast), Blender, Godot.

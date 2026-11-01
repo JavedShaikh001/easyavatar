@@ -148,8 +148,9 @@ export function describeAvatar(P) {
   loft(body, banded(range(L - 0.045, L + 0.462, 0.02), [waistY, topEnd], torsoRegion, (y, region, lip) => {
     const [w, df, db, p] = interp(prof, y);
     const sc = lip * clothScale(region);
-    return { c: [0, y, 0], n: [0, 0, 1], w: w * sc, df: df * sc, db: db * sc, p, wt: torsoW, rect: R[region] };
-  }), { seg: 28, capStart: true });
+    const v = region === 'top' ? clamp((topEnd - y) / (topEnd - waistY), 0, 1) : region === 'bottom' ? clamp((waistY - y) / 0.6, 0, 0.25) : 0.5;
+    return { c: [0, y, 0], n: [0, 0, 1], w: w * sc, df: df * sc, db: db * sc, p, wt: torsoW, rect: R[region], v };
+  }), { seg: 28, capStart: true, a0: -Math.PI / 2 });
 
   // ---------- neck ----------
   loft(body, [
@@ -179,7 +180,7 @@ export function describeAvatar(P) {
     const ts = armTable.map((a) => a[0]);
     loft(body, banded(ts, sleeveEnd > 0 ? [sleeveEnd] : [], region, (x, rg, lip) => {
       const r = interp(armTable, x)[0] * armScale * lip * (rg === 'top' && x > shX - 0.02 ? 1.12 : 1);
-      return { c: [sx * x, shY, -0.01], n: [0, 1, 0], w: r, df: r * 0.92, db: r * 0.92, wt: armW, rect: R[rg] };
+      return { c: [sx * x, shY, -0.01], n: [0, 1, 0], w: r, df: r * 0.92, db: r * 0.92, wt: armW, rect: R[rg], v: P.topImage && (P.topImageMode || 'print') === 'print' ? 0.97 : clamp((x - 0.085) / 0.45, 0, 1) };
     }), { seg: 14 });
 
     // palm (palm down) + five jointed fingers
@@ -253,8 +254,8 @@ export function describeAvatar(P) {
       const y = top - t;
       const r = interp(legTable.map(([yy, rr]) => [top - yy, rr]), t)[0] * legScale * lip * clothScale(rg) * (rg === 'bottom' ? 1.02 : 1);
       const x = sx * lerp(legX, legX * 0.92, smooth(L, ankleY, y));
-      return { c: [x, y, 0], n: [0, 0, 1], w: r, df: r, db: r, wt: legW, rect: R[rg] };
-    }), { seg: 16 });
+      return { c: [x, y, 0], n: [0, 0, 1], w: r, df: r, db: r, wt: legW, rect: R[rg], v: clamp(0.25 + t / 1.0, 0, 1) };
+    }), { seg: 16, a0: -Math.PI / 2 });
 
     // shoe
     const fx = sx * legX * 0.92;
@@ -280,8 +281,8 @@ export function describeAvatar(P) {
       [L + 0.09, 0.162, 0.103, 0.113, 0.015],
       [L - 0.02, 0.19, 0.13, 0.14, 0.03],
       [hemY, 0.215, 0.152, 0.162, 0.04],
-    ].map(([y, w, df, db, rip]) => ({ c: [0, y, 0], n: [0, 0, 1], w, df, db, p: 2.2, ripple: rip, rippleK: 14, wt: skirtW, rect: R.bottom })),
-    { seg: 42 });
+    ].map(([y, w, df, db, rip], i) => ({ c: [0, y, 0], n: [0, 0, 1], w, df, db, p: 2.2, ripple: rip, rippleK: 14, wt: skirtW, rect: R.bottom, v: 0.1 + i * 0.3 })),
+    { seg: 42, a0: -Math.PI / 2 });
   }
 
   // ---------- head ----------

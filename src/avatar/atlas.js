@@ -6,7 +6,7 @@ const S = ATLAS_SIZE;
 
 // pixel rects
 const R = {
-  skin: [0, 0, 64, 64], top: [64, 0, 64, 64], bottom: [128, 0, 64, 64], shoe: [192, 0, 64, 64],
+  skin: [0, 0, 64, 64], top: [0, 128, 256, 256], bottom: [256, 128, 256, 256], shoe: [192, 0, 64, 64],
   sock: [256, 0, 64, 64], tie: [320, 0, 64, 64], white: [384, 0, 64, 64], inner: [448, 0, 64, 64],
   hair: [512, 0, 64, 512],
   eyeWhite: [0, 512, 256, 256], iris: [256, 512, 256, 256], lash: [512, 512, 256, 256],
@@ -18,7 +18,7 @@ const SWATCHES = ['skin', 'top', 'bottom', 'shoe', 'sock', 'tie', 'white', 'inne
 export function atlasRects() {
   const out = {};
   for (const [k, [x, y, w, h]] of Object.entries(R)) {
-    const inset = k === 'eyeball' ? [2, 2] : SWATCHES.includes(k) ? (k === 'hair' ? [12, 4] : [16, 16]) : [1, 1];
+    const inset = k === 'eyeball' ? [2, 2] : (k === 'top' || k === 'bottom') ? [3, 3] : SWATCHES.includes(k) ? (k === 'hair' ? [12, 4] : [16, 16]) : [1, 1];
     out[k] = { u0: (x + inset[0]) / S, v0: (y + inset[1]) / S, u1: (x + w - inset[0]) / S, v1: (y + h - inset[1]) / S };
   }
   return out;
@@ -60,7 +60,7 @@ function almondPath(ctx, x, y, w, h) {
   ctx.closePath();
 }
 
-export function drawAtlas(P, { shade = false } = {}) {
+export function drawAtlas(P, { shade = false, images = {} } = {}) {
   const cv = document.createElement('canvas');
   cv.width = cv.height = S;
   const ctx = cv.getContext('2d');
@@ -74,6 +74,31 @@ export function drawAtlas(P, { shade = false } = {}) {
     const [x, y, w, h] = R[k];
     ctx.fillStyle = C[k];
     ctx.fillRect(x, y, w, h);
+  }
+  // garments made from a picture: tiled fabric or a print on the front
+  for (const part of ['top', 'bottom']) {
+    const img = images[part];
+    if (!img) continue;
+    const [x, y, w, h] = R[part];
+    const mode = P[part + 'ImageMode'] || (part === 'top' ? 'print' : 'pattern');
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    if (mode === 'pattern') {
+      const n = 3, tw = w / n, th = (tw * img.height) / img.width;
+      for (let ty = y; ty < y + h; ty += th) for (let tx = x; tx < x + w; tx += tw) ctx.drawImage(img, tx, ty, tw, th);
+    } else {
+      // front of the garment = middle of the strip; keep the picture's proportions
+      // the strip wraps around the body (~0.85 m round the chest, ~0.3 m tall for a top), so widths are squeezed
+      // to keep the picture's real proportions once it's on the garment
+      const [around, tall] = part === 'top' ? [0.85, 0.29] : [0.5, 0.7];
+      const aspect = img.width / img.height;
+      let physH = part === 'top' ? 0.15 : 0.18, physW = aspect * physH;
+      if (physW > 0.26) { physW = 0.26; physH = physW / aspect; }
+      const dw = (physW / around) * w, dh = Math.min(h * 0.9, (physH / tall) * h);
+      ctx.drawImage(img, x + w / 2 - dw / 2, y + h * (part === 'top' ? 0.42 : 0.55) - dh / 2, dw, dh);
+    }
+    if (shade) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = '#9a9aa8'; ctx.fillRect(x, y, w, h); }
+    ctx.restore();
   }
   // hair: root -> tip gradient with the classic anime highlight ring
   {

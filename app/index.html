@@ -41,6 +41,7 @@
         <div class="chips" data-choice="style"></div>
         <div class="cam-wrap" id="scanCam">
           <video id="cam" playsinline muted></video>
+          <img id="photoPreview" alt="" hidden>
           <div class="oval"></div>
           <div class="cam-msg" id="scanMsg">Camera is off</div>
           <div class="count" id="scanCount"></div>
@@ -50,6 +51,8 @@
           <button class="btn" id="btnCam">Turn on camera</button>
           <button class="btn primary grow" id="btnScan" disabled>Scan my face</button>
         </div>
+        <button class="btn wide-soft" id="btnPhoto">🖼️ Or make it from a photo…</button>
+        <input type="file" id="photoFile" accept="image/*" hidden>
         <div class="cam-help" id="camHelp" hidden>
           <p id="camHelpText"></p>
           <button class="btn small primary" id="btnCompat">Use camera compatibility mode</button>
@@ -101,6 +104,14 @@
           <label>Shoes <input type="color" data-color="shoeColor"></label>
         </div>
         <label class="check"><input type="checkbox" data-bool="socks"> Socks <input type="color" data-color="sockColor"></label>
+        <h3>Clothes from a picture</h3>
+        <p class="hint">Use a photo of a T-shirt print, a logo or a fabric. Pick what to put it on and crop the part you want.</p>
+        <div class="row">
+          <button class="btn small grow" data-cloth="top">🖼️ Picture for top</button>
+          <button class="btn small grow" data-cloth="bottom">🖼️ Picture for bottom</button>
+        </div>
+        <div id="clothList"></div>
+        <input type="file" id="clothFile" accept="image/*" hidden>
       </section>
 
       <section data-panel="vtube">
@@ -144,6 +155,22 @@
     <div class="busy" id="busy" hidden><span></span>Building…</div>
     <div class="toast" id="toast" hidden></div>
   </main>
+</div>
+<div class="modal" id="cropModal" hidden>
+  <div class="modal-box">
+    <h2 id="cropTitle">Choose the part to use</h2>
+    <p class="hint">Drag a box around the part of the picture you want. Without a box, the whole picture is used.</p>
+    <canvas id="cropCanvas"></canvas>
+    <h3>Use it as</h3>
+    <div class="chips" id="cropMode">
+      <button data-mode="print">Print on the front</button>
+      <button data-mode="pattern">Fabric pattern (repeats)</button>
+    </div>
+    <div class="row end">
+      <button class="btn" id="cropCancel">Cancel</button>
+      <button class="btn primary" id="cropUse">Use picture</button>
+    </div>
+  </div>
 </div>
 <script src="renderer.js"></script>
 </body>

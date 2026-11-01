@@ -91,7 +91,7 @@ export function rectUV(rect, s, t) {
  *            rect: atlas rect, v: 0..1 along rect }
  * Winding gives outward-facing triangles (u = n x t, so (u, n, t) is right-handed).
  */
-export function loft(mb, secs, { seg = 12, capStart = false, capEnd = false, capExt = 0 } = {}) {
+export function loft(mb, secs, { seg = 12, capStart = false, capEnd = false, capExt = 0, a0 = 0 } = {}) {
   const rings = [];
   let lastT = [0, 1, 0];
   const frames = secs.map((s, i) => {
@@ -118,8 +118,9 @@ export function loft(mb, secs, { seg = 12, capStart = false, capEnd = false, cap
     const { u, n } = frames[i];
     const ex = 2 / (s.p || 2);
     const ring = [];
-    for (let k = 0; k < seg; k++) {
-      const a = (2 * Math.PI * k) / seg;
+    // seg + 1 vertices: the last repeats the first with u = 1 so textures don't smear across the seam
+    for (let k = 0; k <= seg; k++) {
+      const a = a0 + (2 * Math.PI * k) / seg;
       const cs = Math.cos(a), sn = Math.sin(a);
       const rip = 1 + (s.ripple || 0) * Math.cos((s.rippleK || 8) * a);
       const x = s.w * rip * Math.sign(cs) * Math.pow(Math.abs(cs), ex);
@@ -133,7 +134,7 @@ export function loft(mb, secs, { seg = 12, capStart = false, capEnd = false, cap
 
   for (let i = 0; i < rings.length - 1; i++) {
     for (let k = 0; k < seg; k++) {
-      const A = rings[i][k], B = rings[i][(k + 1) % seg], C = rings[i + 1][k], D = rings[i + 1][(k + 1) % seg];
+      const A = rings[i][k], B = rings[i][k + 1], C = rings[i + 1][k], D = rings[i + 1][k + 1];
       mb.tri(A, B, C); mb.tri(B, D, C);
     }
   }
@@ -144,8 +145,8 @@ export function loft(mb, secs, { seg = 12, capStart = false, capEnd = false, cap
     const C = mb.v(c, rectUV(s.rect, 0.5, s.v ?? 0.5), w);
     const r = rings[i];
     for (let k = 0; k < seg; k++) {
-      if (start) mb.tri(C, r[(k + 1) % seg], r[k]);
-      else mb.tri(C, r[k], r[(k + 1) % seg]);
+      if (start) mb.tri(C, r[k + 1], r[k]);
+      else mb.tri(C, r[k], r[k + 1]);
     }
   };
   if (capStart) cap(0, true);
