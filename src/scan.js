@@ -78,6 +78,9 @@ function animeHair(rgb) {
 }
 function animeEye(rgb) {
   const [h, s, l] = rgbToHsl(rgb);
+  // dark or washed-out irises read as noise (lighting, lashes, camera tint): call them brown
+  const natural = (h > 0.5 && h < 0.7) || (h > 0.18 && h < 0.45) || h < 0.11; // blue, green, brown/amber hues
+  if (l < 0.22 || s < 0.15 || !natural) return rgbToHex(hslToRgb([0.07, 0.45, clamp(0.18 + l * 0.6, 0.2, 0.35)]));
   return rgbToHex(hslToRgb([h, clamp(Math.max(s * 1.4, 0.35), 0, 0.85), clamp(0.25 + l * 0.9, 0.3, 0.6)]));
 }
 
