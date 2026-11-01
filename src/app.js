@@ -692,6 +692,29 @@ window.api.selftestInfo().then(async (info) => {
     renderer.render(scene, camera);
     await window.api.selftestWrite(name, canvas.toDataURL('image/png'));
   };
+  if (info.photo) {
+    // developer mode: photo file -> realistic avatar -> Unreal/MetaHuman package
+    try {
+      const bytes = await window.api.selftestRead(info.photo);
+      const blob = new Blob([bytes]);
+      const img = await createImageBitmap(blob);
+      const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      cv.videoWidth = cv.width; cv.videoHeight = cv.height;
+      const lm = await getLandmarker((m) => log(m));
+      const patch = await scanFace(cv, lm, { frames: 3 });
+      params = normalizeParams({ ...DEFAULTS, ...patch, style: 'real', name: 'MyMetaHuman' });
+      syncUI(); await rebuild();
+      setView('face', true); await shot('photo-face.png');
+      await window.api.selftestWrite('photo-unreal.zip', await exportUnrealPackage(params));
+      await window.api.selftestWrite('photo-params.json', JSON.stringify(params));
+      log('photo ok');
+      window.api.selftestDone(0);
+    } catch (e) { log('PHOTO FAILED', e.stack || e.message); window.api.selftestDone(1); }
+    return;
+  }
   try {
     await wait(500);
     const variants = [

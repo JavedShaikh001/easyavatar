@@ -12,5 +12,6 @@ contextBridge.exposeInMainWorld('api', {
   setCameraCompat: (on) => ipcRenderer.invoke('set-camera-compat', on),
   selftestInfo: () => ipcRenderer.invoke('selftest-info'),
   selftestWrite: (name, data) => ipcRenderer.invoke('selftest-write', name, data),
+  selftestRead: (p) => ipcRenderer.invoke('selftest-read', p),
   selftestDone: (code) => ipcRenderer.invoke('selftest-done', code),
 });

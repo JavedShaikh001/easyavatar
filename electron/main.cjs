@@ -132,7 +132,8 @@ ipcMain.handle('set-camera-compat', async (_e, on) => {
 });
 
 // --- self-test hooks (only active when EASYAVATAR_SELFTEST is set) ---
-ipcMain.handle('selftest-info', () => (SELFTEST_DIR ? { dir: SELFTEST_DIR } : null));
+ipcMain.handle('selftest-info', () => (SELFTEST_DIR ? { dir: SELFTEST_DIR, photo: process.env.EASYAVATAR_PHOTO || '' } : null));
+ipcMain.handle('selftest-read', (_e, p) => (SELFTEST_DIR ? new Uint8Array(fs.readFileSync(p)) : null));
 ipcMain.handle('selftest-write', async (_e, name, data) => {
   if (!SELFTEST_DIR) return false;
   const out = path.join(SELFTEST_DIR, path.basename(name));
